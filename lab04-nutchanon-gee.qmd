@@ -1,0 +1,113 @@
+---
+title: "Job Postings Data Analysis"
+author: "Nutchanon Chaiyaratana"
+format:
+  html: default
+  docx: default
+execute:
+  echo: true
+  eval: true
+  freeze: auto
+---
+
+## Load Libraries
+
+```{python}
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, count, avg, desc, to_date
+```
+
+## Start Spark Session
+
+```{python}
+spark = SparkSession.builder.appName("JobPostingsAnalysis").getOrCreate()
+```
+
+## Load Dataset
+
+```{python}
+df = spark.read.option("header", "true") \
+    .option("inferSchema", "false") \
+    .option("multiLine", "true") \
+    .option("escape", "\"") \
+    .csv("data/lightcast_job_postings.csv")
+
+df.printSchema()
+```
+
+## Show First Five Rows
+
+```{python}
+df.show(5, truncate=False)
+```
+
+## Count Total Job Postings
+
+```{python}
+total_jobs = df.count()
+print("Total job postings:", total_jobs)
+```
+
+## Remove Duplicates
+
+```{python}
+df_clean = df.dropDuplicates(["ID"])
+print("Rows after removing duplicates:", df_clean.count())
+```
+
+## Convert Salary Columns
+
+```{python}
+df_clean = df_clean.withColumn("SALARY_FROM", col("SALARY_FROM").cast("double")) \
+                   .withColumn("SALARY_TO", col("SALARY_TO").cast("double"))
+
+df_clean = df_clean.withColumn(
+    "AVG_SALARY",
+    (col("SALARY_FROM") + col("SALARY_TO")) / 2
+)
+```
+
+## Convert Date Columns
+
+```{python}
+df_clean = df_clean.withColumn("POSTED_DATE", to_date(col("POSTED"))) \
+                   .withColumn("EXPIRED_DATE", to_date(col("EXPIRED")))
+```
+
+## Top 5 Job Titles
+
+```{python}
+top_titles = df_clean.groupBy("TITLE_CLEAN") \
+    .agg(count("*").alias("job_count")) \
+    .orderBy(desc("job_count")) \
+    .limit(5)
+
+top_titles.show()
+```
+
+## Average Salary by Employment Type
+
+```{python}
+salary_by_type = df_clean.groupBy("EMPLOYMENT_TYPE") \
+    .agg(avg("AVG_SALARY").alias("average_salary")) \
+    .orderBy(desc("average_salary"))
+
+salary_by_type.show()
+```
+
+## State with the Most Job Postings
+
+```{python}
+state_counts = df_clean.groupBy("STATE") \
+    .agg(count("*").alias("job_count")) \
+    .orderBy(desc("job_count")) \
+    .limit(5)
+
+state_counts.show()
+```
+
+## Stop Spark Session
+
+```{python}
+spark.stop()
+```
